@@ -1,0 +1,23 @@
+# 依賴和構建文件
+node_modules
+.nuxt
+.output
+dist
+.git
+public
+coverage
+
+# 生成的文件
+*.min.*
+*.d.ts
+__snapshots__
+
+# shadcn 組件
+components/ui/
+
+# 配置文件
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+CHANGELOG*.md
+LICENSE*
