@@ -297,7 +297,7 @@ export default defineNuxtConfig({
 | `useMemo`     | `computed`              | 計算屬性     |
 | `useCallback` | `computed`              | 函數記憶化   |
 | `useContext`  | `provide` / `inject`    | 依賴注入     |
-| `useReducer`  | `useStore` (Pinia)      | 複雜狀態管理 |
+| `zustand`     | `useStore` (Pinia)      | 複雜狀態管理 |
 
 ### 從 Next.js 到 Nuxt
 
@@ -316,41 +316,147 @@ export default defineNuxtConfig({
 
 ### 資料獲取比較
 
-Nuxt 3 提供了兩種主要的資料獲取方式：
+Nuxt 3 提供了三種主要的資料獲取方式：
 
-#### useFetch
+#### 1. useFetch
 
 ```typescript
 // 在元件掛載時自動獲取資料
 const { data, pending, error, refresh } = await useFetch('/api/posts');
 ```
 
--   預設在元件初始化時立即執行
--   支援 SSR（伺服器端渲染）
--   自動處理載入和錯誤狀態
--   內建資料快取
+特點：
 
-#### useLazyFetch
+-   預設在元件初始化時立即執行
+-   支援 SSR（伺服器端渲染）和 hydration
+-   自動處理載入和錯誤狀態
+-   內建資料快取和請求去重
+-   提供響應式的資料和狀態
+-   適合用於頁面或元件級別的資料獲取
+
+#### 2. useLazyFetch
 
 ```typescript
 // 延遲加載資料，需要手動觸發
-const { data, pending, error, refresh } = useLazyFetch('/api/posts');
+const { data, pending, error, refresh } = useLazyFetch(() => `/api/search?q=${searchQuery.value}`);
 
 // 在事件處理程序中手動觸發
-const handleLoadData = () => {
+const handleSearch = () => {
     refresh();
 };
 ```
 
+特點：
+
 -   不會在元件初始化時自動執行
 -   適用於條件式資料載入
 -   可以透過 refresh() 手動觸發
+-   支援動態 URL 和參數
 -   適合用於分頁、搜尋等使用者互動場景
 
-兩者的主要區別：
+#### 3. $fetch
 
--   `useFetch`：適合需要立即載入的資料，例如頁面主要內容
--   `useLazyFetch`：適合按需載入的資料，例如模態框內容或分頁資料
+```typescript
+// 直接發送 HTTP 請求
+const handleSubmit = async () => {
+    try {
+        const response = await $fetch('/api/posts', {
+            method: 'POST',
+            body: formData,
+        });
+        // 手動處理成功回應
+    } catch (error) {
+        // 手動處理錯誤
+    }
+};
+```
+
+特點：
+
+-   輕量級的 HTTP 客戶端
+-   不包含額外的狀態管理
+-   需要手動處理載入和錯誤狀態
+-   適合用於事件處理程序或非元件邏輯
+
+#### 客戶端資料獲取最佳實踐
+
+```vue
+<script setup>
+// 1. 頁面必需的初始資料：使用 useFetch
+const { data: posts } = await useFetch('/api/posts', {
+    // 可以設定快取策略
+    cache: 'memory',
+});
+
+// 2. 使用者互動觸發的資料載入：使用 useLazyFetch
+const { data: searchResults, refresh: refreshSearch } = useLazyFetch(() => ({
+    url: '/api/search',
+    query: { q: searchQuery.value },
+}));
+
+// 3. 表單提交或其他 HTTP 請求：使用 $fetch
+const handleSubmit = async () => {
+    try {
+        await $fetch('/api/posts', {
+            method: 'POST',
+            body: formData,
+        });
+        // 處理成功
+    } catch (error) {
+        // 處理錯誤
+    }
+};
+</script>
+
+<template>
+    <!-- 展示主要內容 -->
+    <div v-if="posts">
+        <PostList :posts="posts" />
+    </div>
+
+    <!-- 搜尋功能 -->
+    <div>
+        <input v-model="searchQuery" @input="refreshSearch" />
+        <div v-if="searchResults">
+            <SearchResults :results="searchResults" />
+        </div>
+    </div>
+
+    <!-- 表單提交 -->
+    <form @submit.prevent="handleSubmit">
+        <!-- 表單內容 -->
+    </form>
+</template>
+```
+
+#### 選擇建議
+
+1. **使用 useFetch 當：**
+
+    - 需要在元件載入時就獲取資料（如頁面主要內容）
+    - 需要 SSR 支援和自動 hydration
+    - 需要自動的載入狀態和錯誤處理
+    - 需要資料快取和請求去重
+
+2. **使用 useLazyFetch 當：**
+
+    - 需要延遲載入資料（如次要內容）
+    - 需要根據使用者互動載入資料（如搜尋、篩選）
+    - 需要動態 URL 或查詢參數
+    - 需要手動控制資料重新載入
+
+3. **使用 $fetch 當：**
+    - 在事件處理程序中發送請求（如表單提交）
+    - 在 Pinia store 中進行資料獲取
+    - 需要完全控制請求的生命週期
+    - 不需要響應式資料和自動狀態管理
+
+這樣的區分可以讓您的應用程式：
+
+-   有更好的效能（避免不必要的請求）
+-   更好的使用者體驗（適時載入資料）
+-   更好的狀態管理（自動處理載入狀態）
+-   更好的程式碼組織（依據用途選擇適當的 API）
 
 ### 渲染模式設定
 
