@@ -301,14 +301,177 @@ export default defineNuxtConfig({
 
 ### 從 Next.js 到 Nuxt
 
-| Next.js              | Nuxt                       | 說明         |
-| -------------------- | -------------------------- | ------------ |
-| `getServerSideProps` | `useFetch` (server: true)  | SSR 資料獲取 |
-| `getStaticProps`     | `useFetch` (server: false) | SSG 資料獲取 |
-| `getStaticPaths`     | `generateStaticParams`     | 動態路由生成 |
-| `useRouter`          | `useRouter`                | 路由操作     |
-| `next/head`          | `useSeoMeta`               | SEO 設定     |
-| `next/image`         | `NuxtImg`                  | 圖片最佳化   |
+| Next.js                     | Nuxt                       | 說明             |
+| --------------------------- | -------------------------- | ---------------- |
+| `async function Page()`     | `definePageMeta`           | 頁面配置         |
+| `generateMetadata`          | `useSeoMeta`               | SEO 元資料       |
+| `generateStaticParams`      | `defineStaticPaths`        | 靜態路徑生成     |
+| `useRouter`                 | `useRouter`                | 路由操作         |
+| `next/image`                | `NuxtImg`                  | 圖片最佳化       |
+| `fetch` in Server Component | `useFetch` (server: true)  | 伺服器端資料獲取 |
+| `fetch` in Client Component | `useFetch` (server: false) | 客戶端資料獲取   |
+| `loading.tsx`               | `NuxtLoadingIndicator`     | 載入狀態         |
+| `error.tsx`                 | `error.vue`                | 錯誤處理         |
+| `layout.tsx`                | `layouts/default.vue`      | 布局定義         |
+
+### 資料獲取比較
+
+Nuxt 3 提供了兩種主要的資料獲取方式：
+
+#### useFetch
+
+```typescript
+// 在元件掛載時自動獲取資料
+const { data, pending, error, refresh } = await useFetch('/api/posts');
+```
+
+-   預設在元件初始化時立即執行
+-   支援 SSR（伺服器端渲染）
+-   自動處理載入和錯誤狀態
+-   內建資料快取
+
+#### useLazyFetch
+
+```typescript
+// 延遲加載資料，需要手動觸發
+const { data, pending, error, refresh } = useLazyFetch('/api/posts');
+
+// 在事件處理程序中手動觸發
+const handleLoadData = () => {
+    refresh();
+};
+```
+
+-   不會在元件初始化時自動執行
+-   適用於條件式資料載入
+-   可以透過 refresh() 手動觸發
+-   適合用於分頁、搜尋等使用者互動場景
+
+兩者的主要區別：
+
+-   `useFetch`：適合需要立即載入的資料，例如頁面主要內容
+-   `useLazyFetch`：適合按需載入的資料，例如模態框內容或分頁資料
+
+### 渲染模式設定
+
+Nuxt 3 提供了多種方式來控制頁面的渲染模式：
+
+#### 1. 全域設定（nuxt.config.ts）
+
+```typescript
+export default defineNuxtConfig({
+    // 預設為 'universal'
+    ssr: true, // 啟用 SSR
+    // 靜態網站生成
+    nitro: {
+        prerender: {
+            routes: ['/about', '/blog/[id]'],
+        },
+    },
+});
+```
+
+#### 2. 頁面級別設定
+
+```typescript
+// pages/about.vue
+definePageMeta({
+    // SSR（預設）
+    ssr: true,
+
+    // CSR（禁用 SSR）
+    ssr: false,
+
+    // SSG（靜態生成）
+    static: true,
+
+    // ISR（增量式靜態再生成）
+    static: true,
+    revalidate: 60, // 60 秒後重新驗證
+});
+```
+
+#### 3. 路由規則（nuxt.config.ts）
+
+```typescript
+export default defineNuxtConfig({
+    routeRules: {
+        // SSR - 動態渲染
+        '/admin/**': { ssr: true },
+
+        // CSR - 僅客戶端渲染
+        '/dashboard/**': { ssr: false },
+
+        // SSG - 靜態生成
+        '/blog/**': { static: true },
+
+        // ISR - 增量式靜態再生成
+        '/products/**': {
+            static: true,
+            revalidate: 60, // 60 秒後重新驗證
+        },
+
+        // 快取策略
+        '/api/**': {
+            cache: {
+                maxAge: 60, // 快取 60 秒
+            },
+        },
+    },
+});
+```
+
+#### 渲染模式判定邏輯
+
+1. **SSR（伺服器端渲染）**
+
+    - 預設模式
+    - `ssr: true` 且未設定 `static: true`
+    - 適用於需要即時資料的頁面
+
+2. **CSR（客戶端渲染）**
+
+    - 設定 `ssr: false`
+    - 適用於高度互動且不需要 SEO 的頁面
+
+3. **SSG（靜態網站生成）**
+
+    - 設定 `static: true`
+    - 在建置時生成靜態 HTML
+    - 適用於內容固定的頁面
+
+4. **ISR（增量式靜態再生成）**
+    - 設定 `static: true` 和 `revalidate`
+    - 結合 SSG 的效能和動態內容的即時性
+    - 適用於需要定期更新的頁面
+
+#### 最佳實踐建議
+
+-   **動態內容為主的頁面**：使用 SSR
+
+    ```typescript
+    definePageMeta({ ssr: true });
+    ```
+
+-   **管理後台/儀表板**：使用 CSR
+
+    ```typescript
+    definePageMeta({ ssr: false });
+    ```
+
+-   **行銷/文檔頁面**：使用 SSG
+
+    ```typescript
+    definePageMeta({ static: true });
+    ```
+
+-   **電商產品頁面**：使用 ISR
+    ```typescript
+    definePageMeta({
+        static: true,
+        revalidate: 3600, // 每小時更新一次
+    });
+    ```
 
 ## 📚 API 參考
 
@@ -411,37 +574,3 @@ EXPOSE 3000
 
 CMD ["node", ".output/server/index.mjs"]
 ```
-
-## 🤝 貢獻指南
-
-歡迎貢獻！請遵循以下步驟：
-
-1. Fork 專案
-2. 建立特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 開啟 Pull Request
-
-## 📝 許可證
-
-本專案使用 MIT 許可證。詳細資訊請參閱 [LICENSE](LICENSE) 文件。
-
-## 🙏 致謝
-
--   [Nuxt 3](https://nuxt.com/) - 強大的 Vue 框架
--   [Vue 3](https://vuejs.org/) - 漸進式 JavaScript 框架
--   [Tailwind CSS](https://tailwindcss.com/) - 實用優先的 CSS 框架
--   [Shadcn/ui](https://ui.shadcn.com/) - 美觀的 UI 元件庫
--   [JSONPlaceholder](https://jsonplaceholder.typicode.com/) - 免費的 REST API 服務
-
-## 📞 聯絡我們
-
-如果您有任何問題或建議，請隨時聯絡我們：
-
--   📧 Email: [your-email@example.com]
--   🐛 Issues: [GitHub Issues](https://github.com/your-username/nuxt-app/issues)
--   💬 討論: [GitHub Discussions](https://github.com/your-username/nuxt-app/discussions)
-
----
-
-**快樂編程！** 🎉
